@@ -160,7 +160,7 @@ def get_dataset(name: str):
 
         data = data[select].copy()
         selected_races = data[["Race_1", "Race_2",
-                               "Race_3", "Race_5"]].any(axis=1)
+                            "Race_3", "Race_5"]].any(axis=1)
         data = data[selected_races].dropna()
         data["Hist"] = (
             data[[f'DM_hist{i}' for i in range(1, 8+1)]] == 1).any(axis=1).astype('int')
@@ -175,16 +175,10 @@ def get_dataset(name: str):
             sep="_").Race.astype(int).tolist()
         data.Race.replace({1: 0, 2: 1, 3: 2, 5: 3}, inplace=True)
 
-        data['Age'] = pd.cut(
-            data["Age_at_V1"],
-            [-np.inf, 18, 35, np.inf],
-            labels=range(3)).astype(int)
+        data['Age'] = (data["Age_at_V1"] > 18) & (data["Age_at_V1"] < 35)
         data.drop(['Age_at_V1'], axis=1, inplace=True)
 
-        data['BMI'] = pd.cut(
-            data['BMI'],
-            [-np.inf, 18.5, 30, np.inf],
-            labels=range(3)).astype(int)
+        data['BMI'] = data['BMI'] > 30
         data.METs = (data.METs > 450).astype(int)
         data.drop([f'Race_{i}' for i in range(1, 9+1)], axis=1, inplace=True)
         data.drop([f'DM_hist{i}' for i in range(1, 8+1)],  axis=1, inplace=True)
