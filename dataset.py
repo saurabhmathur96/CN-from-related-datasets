@@ -137,6 +137,7 @@ def get_dataset(name: str):
         data.drop([f'DM_hist{i}' for i in range(1, 8+1)],  axis=1, inplace=True)
         data.drop([f'HiBP{i}' for i in [1, 2]],  axis=1, inplace=True)
         data.drop([f'PCOS{i}' for i in [1, 2]],  axis=1, inplace=True)
+        data = data.astype(int)
 
         r = {column: data[column].max()+1 for column in data.columns}
         train, test = train_test_split(
@@ -184,7 +185,8 @@ def get_dataset(name: str):
         data.drop([f'DM_hist{i}' for i in range(1, 8+1)],  axis=1, inplace=True)
         data.drop([f'HiBP{i}' for i in [1, 2]],  axis=1, inplace=True)
         data.drop([f'PCOS{i}' for i in [1, 2]],  axis=1, inplace=True)
-
+        data = data.astype(int)
+        
         r = {column: data[column].max()+1 for column in data.columns}
         train, test = train_test_split(
             data, train_size=0.8, stratify=data[["Race", "PTB"]],
