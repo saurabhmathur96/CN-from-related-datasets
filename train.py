@@ -37,7 +37,8 @@ n_groups = train.r[train.group_col]
 frac = train.as_df()[target].mean()
 print(f"{frac:.4f}")
 base = path.join("models", target)
-n_samples = 1
+n_samples = args.n_samples
+assert n_samples <= 10
 
 for i, train_ in tqdm(
         enumerate(train.bootstrap_samples(n_samples, random_states)),
