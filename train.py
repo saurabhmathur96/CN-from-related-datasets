@@ -1,7 +1,7 @@
 from os import path, makedirs
 import argparse
 
-from sklearn.naive_bayes import MultinomialNB
+from sklearn.naive_bayes import BernoulliNB
 from tqdm import tqdm
 import joblib
 
@@ -47,21 +47,26 @@ for i, train_ in tqdm(
     makedirs(sample_path, exist_ok=True)
 
     train_df = train_.as_df()
-    clf = MultinomialNB().fit(
+    clf = BernoulliNB().fit(
         train_df.drop(target, axis=1),
         train_.as_df()[target])
     joblib.dump(clf, path.join(sample_path, "model0.pkl"))
 
-    cnet = learn_structure(train_, learn_chow_liu_leaf,
-                           mi_score, min_score=0.01)
-    parameters = [estimate_parameters(cnet, d) for d in train_.datasets]
-    joblib.dump([cnet, parameters], path.join(sample_path, "model1.pkl"))
+    # Separate structure and parameters
+    cnets = [
+        learn_structure(dataset, learn_chow_liu_leaf,
+                                bic_score2, min_score=0.0)
+        for dataset in train_.datasets
+    ]
+    joblib.dump(cnets, path.join(sample_path, "model1.pkl"))
 
+    # Common structure and parameters; separate parameters
     cnet2 = learn_structure(train_, learn_chow_liu_leaf,
                             bic_score2, min_score=0.0)
     parameters2 = [estimate_parameters(cnet2, d) for d in train_.datasets]
-    joblib.dump([cnet2, parameters2], path.join(sample_path, "model2.pkl"))
+    joblib.dump([cnet2, estimate_parameters(cnet2, train_), parameters2], path.join(sample_path, "model2.pkl"))
 
+    # Mixed effects model
     cnet3 = learn_structure(train_, learn_chow_liu_leaf,
                             group_bic_score2, min_score=0.0)
     parameters3 = [estimate_parameters(

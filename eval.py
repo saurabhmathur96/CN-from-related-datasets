@@ -42,64 +42,123 @@ else:
     raise ValueError("Invalid target")
 
 train, test = get_dataset(dataset)
-
 base = path.join("models", target)
 n_samples = args.n_samples
 assert n_samples <= 10
 n_groups = train.r[train.group_col]
 
-scores = np.zeros((4, n_groups, n_samples))
-ll = np.zeros((4, n_groups, n_samples))
+scores = np.zeros((5, n_groups, n_samples))
+ascores = np.zeros((5, n_samples))
+ll = np.zeros((5, n_groups, n_samples))
 for i in trange(n_samples):
     clf = joblib.load(path.join(base, f"sample{i}", "model0.pkl"))
-    [cnet, parameters] = joblib.load(
-        path.join(base, f"sample{i}", "model1.pkl"))
-    [cnet2, parameters2] = joblib.load(
-        path.join(base, f"sample{i}", "model2.pkl"))
-    [cnet3, parameters3] = joblib.load(
-        path.join(base, f"sample{i}", "model3.pkl"))
+    
+    # (0) Naive Bayes
+    p1 = []
+    y = []
     for g, test_ in enumerate(test.datasets):
-        test_df = test_.as_df().drop(target, axis=1)
-        scores[0, g, i] = roc_auc_score(
-            test_.as_df()[target], clf.predict_proba(test_df)[:, 1])
+        test_data = test_.as_df().drop(target, axis=1)
+        test_labels = test_.as_df()[target]
+        
+        p1.append(clf.predict_proba(test_data)[:, 1])
+        y.append(test_labels.to_numpy())
 
-        cnet = set_parameters(cnet, parameters[g])
-        scores[1, g, i] = roc_auc_score(
-            test_.as_df()[target], predict(cnet, target, test_)[:, 1])
+        scores[0, g, i] = roc_auc_score(test_labels, p1[-1])
+        jlp = clf.predict_joint_log_proba(test_data)
+        ll[0, g, i] = np.sum(jlp[np.arange(len(test_)), test_labels])
+
+    ascores[0, i] = roc_auc_score(np.concatenate(y), np.concatenate(p1))
+    
+    # (1) Separate CN for each group
+    cnets = joblib.load(
+        path.join(base, f"sample{i}", "model1.pkl"))
+    
+    p1 = []
+    y = []
+    for g, test_ in enumerate(test.datasets):
+        cnet = cnets[g]
+        test_labels = test_.as_df()[target]
+
+        p1.append(predict(cnet, target, test_)[:, 1])
+        y.append(test_labels.to_numpy())
+
+        scores[1, g, i] = roc_auc_score(test_labels, p1[-1])
         ll[1, g, i] = cnet(test_)
 
-        cnet2 = set_parameters(cnet2, parameters2[g])
-        scores[2, g, i] = roc_auc_score(
-            test_.as_df()[target], predict(cnet2, target, test_)[:, 1])
+    ascores[1, i] = roc_auc_score(np.concatenate(y), np.concatenate(p1))
+    
+    # (2) Single CN
+    [cnet2, default_parameters2, parameters2] = joblib.load(
+        path.join(base, f"sample{i}", "model2.pkl"))
+
+    p1 = []
+    y = []
+    cnet2 = set_parameters(cnet2, default_parameters2)
+    for g, test_ in enumerate(test.datasets):
+        test_labels = test_.as_df()[target]
+
+        p1.append(predict(cnet2, target, test_)[:, 1])
+        y.append(test_labels.to_numpy())
+
+        scores[2, g, i] = roc_auc_score(test_labels, p1[-1])
         ll[2, g, i] = cnet2(test_)
 
+    ascores[2, i] = roc_auc_score(np.concatenate(y), np.concatenate(p1))
+    
+    # (3) Single structure, different parameters
+    p1 = []
+    y = []
+    for g, test_ in enumerate(test.datasets):
+        cnet2 = set_parameters(cnet2, parameters2[g])
+        test_labels = test_.as_df()[target]
+
+        p1.append(predict(cnet2, target, test_)[:, 1])
+        y.append(test_.as_df()[target].to_numpy())
+
+        scores[3, g, i] = roc_auc_score(test_labels, p1[-1])
+        ll[3, g, i] = cnet2(test_)
+    ascores[3, i] = roc_auc_score(np.concatenate(y), np.concatenate(p1))
+
+    # (4) Mixed-effects model
+    [cnet3, parameters3] = joblib.load(
+        path.join(base, f"sample{i}", "model3.pkl"))
+
+    p1 = []
+    y = []
+    for g, test_ in enumerate(test.datasets):
         cnet3 = set_parameters(cnet3, parameters3[g], leaf_only=True)
-        scores[3, g, i] = roc_auc_score(
-            test_.as_df()[target], predict(cnet3, target, test_)[:, 1])
-        ll[3, g, i] = cnet3(test_)
+        test_labels = test_.as_df()[target]
 
-for g in range(n_groups):
-    m0, m1, m2, m3 = np.mean(
-        scores[0, g, :]), np.mean(
-        scores[1, g, :]), np.mean(
-        scores[2, g, :]), np.mean(
-        scores[3, g, :])
-    s0, s1, s2, s3 = np.std(
-        scores[0, g, :]), np.std(
-        scores[1, g, :]), np.std(
-        scores[2, g, :]), np.std(
-        scores[3, g, :])
-    print(f"{m0:.4f} ± {s0:.2f} | {m1:.4f} ± {s1:.2f} | {m2:.4f} ± {s2:.2f} | {m3:.4f} ± {s3:.2f}")
+        p1.append(predict(cnet3, target, test_)[:, 1])
+        y.append(test_.as_df()[target].to_numpy())
 
-for g in range(n_groups):
-    m0, m1, m2, m3 = np.mean(
-        ll[0, g, :]), np.mean(
-        ll[1, g, :]), np.mean(
-        ll[2, g, :]), np.mean(
-        ll[3, g, :])
-    s0, s1, s2, s3 = np.std(
-        ll[0, g, :]), np.std(
-        ll[1, g, :]), np.std(
-        ll[2, g, :]), np.std(
-        ll[3, g, :])
-    print(f"{m0:.4f} ± {s0:.2f} | {m1:.4f} ± {s1:.2f} | {m2:.4f} ± {s2:.2f} | {m3:.4f} ± {s3:.2f}")
+        scores[4, g, i] = roc_auc_score(test_labels, p1[-1])
+        ll[4, g, i] = cnet3(test_)
+    ascores[4, i] = roc_auc_score(np.concatenate(y), np.concatenate(p1))
+    
+
+for a in [ll, scores]:
+    for g in range(n_groups):
+        row = []
+        for m in range(5):
+            mean = np.mean(a[m, g, :])
+            std = np.std(a[m, g, :])
+            row.append(f"{mean:.4f} ± {std:.2f}")
+        print (" | ".join(row))
+    print ("\n")
+
+print ("\n")
+
+row = []
+for m in range(5):
+    mean = np.mean(ascores[m])
+    std = np.std(ascores[m])
+    row.append(f"{mean:.4f} ± {std:.2f}")
+print (" | ".join(row))
+
+row = []
+for m in range(5):
+    mean = np.mean(np.sum(ll[m], axis=0))
+    std = np.std(np.sum(ll[m], axis=0))
+    row.append(f"{mean:.4f} ± {std:.2f}")
+print (" | ".join(row))
